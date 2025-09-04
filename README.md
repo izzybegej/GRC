@@ -1,6 +1,3 @@
-# GRC
-Security Scanner for GRC Compliance 
-
 # Compliance Configuration Scanner (CCS)
 
 **Project Start Date:** September 5, 2024  
