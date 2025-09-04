@@ -1,7 +1,7 @@
 # Compliance Configuration Scanner (CCS)
 
-**Project Start Date:** September 5, 2024  
-**Expected Completion:** December 2, 2024  
+**Project Start Date:** September 5, 2025  
+**Expected Completion:** December 2, 2025  
 
 ## Project Overview
 
