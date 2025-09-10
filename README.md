@@ -49,14 +49,18 @@ An automated Python tool that scans computer systems to check if they follow sec
 ## Project Status
 
 **Week 1 - Framework Research** (In Progress)
-- [ ] Learn NIST Cybersecurity Framework
-- [ ] Study ISO 27001 security controls
-- [ ] Define target controls for automation
-- [ ] Create project scope document
+- [X] Learn NIST Cybersecurity Framework
+- [X] Study ISO 27001 security controls
+- [X] Define target controls for automation
+- [X] Create project scope document
 
 ## Installation
-
-*Coming in Week 2*
+- [ ] Python environment setup with virtual lab on Win 11
+- [ ] Install dependencies
+- [ ] Complete initial folder structuring
+- [ ] Work on scanner: Win 11 password policy compliance
+- [ ] Mapping for basic compliance
+- [ ] JSON storage implementations 
 
 ## Usage
 
@@ -70,6 +74,11 @@ This tool handles sensitive system configuration data. All development follows s
 - Encrypted data storage
 - Comprehensive audit logging
 - No hardcoded credentials or secrets
+
+## Learning Resources Used
+- NIST Cybersecurity Framework 2.0
+- ISO 27001 Annex A Controls
+- Python subprocess documentation
 
 ## License
 
