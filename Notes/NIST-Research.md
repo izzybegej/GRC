@@ -38,7 +38,9 @@ A government checklist for cybersecurity. Companies use it to make sure they're 
 ## Why This Matters
 
 **Problem:** Security teams spend weeks manually checking if systems are secure
+
 **Solution:** Automatically scan in hours
+
 **Result:** Companies know their security status in real-time instead of once a year
 
 Each check maps to a NIST rule and gives a PASS/FAIL result with specific recommendations for fixes.
