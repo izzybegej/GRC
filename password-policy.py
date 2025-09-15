@@ -14,7 +14,8 @@ def get_password_info():
     print("Getting password policy from Windows...")
     
     # Run the Windows command 'net accounts'
-    # subprocess.run() lets Python run Windows commands 
+    # subprocess.run() lets Python run Windows commands
+    # TODO: Have security in mind? 
     result = subprocess.run(['net', 'accounts'], capture_output=True, text=True)
 
     # Check if the command worked
@@ -87,6 +88,8 @@ def check_password_security(min_length, lockout_enabled):
         lockout_status = "FAIL"
     
     # Overall result
+    # TODO: Keep the original output for the 'else' statement, then think about how the admin might have a status code. 
+    # TODO: What about complexity becuase '123456789' will pass your test 
     if length_status == "PASS" and lockout_status == "PASS":
         print("\nOVERALL: Your password policy is SECURE!")
     else:
