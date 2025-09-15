@@ -16,6 +16,11 @@ def get_password_info():
     # Run the Windows command 'net accounts'
     # subprocess.run() lets Python run Windows commands 
     result = subprocess.run(['net', 'accounts'], capture_output=True, text=True)
+
+    # Check if the command worked
+    if result.returncode != 0:
+        print("Error: Could not get password policy. Are you running as Administrator?")
+        return "Command failed"
     
     # Return the text output from the command
     return result.stdout
@@ -94,7 +99,7 @@ def main():
     # 1: Get the password information from Windows
     password_data = get_password_info()
     
-    # 2: Find the specific values for password legnth and user lockout
+    # 2: Find the specific values for password length and user lockout
     min_length = find_password_length(password_data)
     lockout_setting = find_lockout_setting(password_data)
     
