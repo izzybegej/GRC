@@ -17,24 +17,6 @@ A government checklist for cybersecurity. Companies use it to make sure they're 
 
 **RECOVER** - How do we get back to normal?
 
-
-## Implementation Timeline
-
-### Week 3-4
-- Are passwords strong enough?
-- Is Windows Firewall on?
-- What software is installed?
-- Who has admin access?
-
-### Week 4-6 
-- Are security updates missing?
-- Do backups work?
-- Are logs being saved?
-
-### Week 7+
-- Is data encrypted?
-- Are user permissions reviewed?
-
 ## Why This Matters
 
 **Problem:** Security teams spend weeks manually checking if systems are secure
