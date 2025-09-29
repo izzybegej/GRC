@@ -3,25 +3,18 @@ Windows Password Policy Scanner
 This script checks Windows password settings and tells you if they're secure.
 Tested 9/10/25 on win 11. 
 Author: Izzy
+Updated Committed: 9/29/25 - Added complexity check and compliance percentage, removed admin check. 
 """
 
 import subprocess
 
 def get_password_info():
     """
-       Runs a Windows command to get password policy information.
+    Runs a Windows command to get password policy information.
     """
     print("Getting password policy from Windows...")
     
-    # Run the Windows command 'net accounts'
-    # subprocess.run() lets Python run Windows commands
-    # TODO: Have security in mind? 
     result = subprocess.run(['net', 'accounts'], capture_output=True, text=True)
-
-    # Check if the command worked
-    if result.returncode != 0:
-        print("Error: Could not get password policy. Are you running as Administrator?")
-        return "Command failed"
     
     # Return the text output from the command
     return result.stdout
@@ -42,7 +35,7 @@ def find_password_length(text):
             length = parts[-1]  # -1 means "last item in the list"
             return int(length)  # Convert text to number
     
-    # If we didn't find it, return 0
+    # If not found, return 0
     return 0
 
 def find_lockout_setting(text):
@@ -57,66 +50,182 @@ def find_lockout_setting(text):
             if 'Never' in line:
                 return 0
             else:
-                # Extract the number (this is more complex, we'll simplify)
+                # Extract the number
                 parts = line.split()
                 return int(parts[-1])
     
     return 0
 
-def check_password_security(min_length, lockout_enabled):
+def check_password_complexity():
     """
-    This function decides if the password settings are good or bad.
-    """
-    print("\n** Security Check Results **")
+    Check if password complexity is enabled.
+    Complexity means passwords must have:
+    - Uppercase letters (A-Z)
+    - Lowercase letters (a-z)  
+    - Numbers (0-9)
+    - Special characters (!@#$)
     
-    # Check password length
-    print(f"Minimum password length: {min_length}")
+    This prevents weak passwords like '123456789' from being allowed.
+    """
+    print("Checking password complexity setting...")
+    
+    # Use PowerShell to check the Local Security Policy
+    # This checks if complexity requirements are turned ON or OFF
+    try:
+        result = subprocess.run(
+            ['powershell', '-Command', 
+             'secedit /export /cfg C:\\Windows\\Temp\\secpol.cfg /quiet; ' +
+             'Select-String -Path C:\\Windows\\Temp\\secpol.cfg -Pattern "PasswordComplexity"'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        # Check if complexity is enabled (value = 1) or disabled (value = 0)
+        if 'PasswordComplexity = 1' in result.stdout:
+            return True
+        else:
+            return False
+            
+    except:
+        print("(Could not determine complexity setting)")
+        return None
+
+def check_password_security(min_length, lockout_enabled, complexity_enabled):
+    """
+    Checks if the passwords meet compliance, give % score. 
+    """
+    print("\n" + "=" * 60)
+    print("** SECURITY CHECK RESULTS **")
+    print("=" * 60)
+    
+    # Track how many checks pass
+    total_checks = 3  # number of compliance checks being run
+    passed_checks = 0
+    
+    # --- CHECK 1: Password Length ---
+    print(f"\n1. Minimum password length: {min_length} characters.")
     if min_length >= 8:
-        print("GOOD: Password length is secure (8 or more characters)")
+        print("    PASS: Length is secure (8 or more characters).")
+        print("    NIST Control: PR.AA-01")
         length_status = "PASS"
+        passed_checks += 1  # Add 1 to pass counter
     else:
-        print("BAD: Password length is too short (should be 8 or more)")
+        print("    FAIL: Length is too short (should be 8 or more).")
+        print("    Security Risk: Weak passwords can be guessed easily.")
         length_status = "FAIL"
     
-    # Check account lockout
-    print(f"\nAccount lockout after failed attempts: {lockout_enabled}")
-    if lockout_enabled > 0:
-        print(f"GOOD: Accounts lock after {lockout_enabled} failed attempts")
+    # --- CHECK 2: Account Lockout ---
+    print(f"\n2. Account lockout after failed attempts: {lockout_enabled}.")
+    if lockout_enabled > 0 and lockout_enabled <= 10:
+        print(f"    PASS: Accounts lock after {lockout_enabled} failed attempts.")
+        print("    NIST Control: PR.AA-03")
         lockout_status = "PASS"
+        passed_checks += 1  # Add 1 to pass counter
     else:
-        print("BAD: Accounts never lock (should lock after 5-10 attempts)")
+        if lockout_enabled == 0:
+            print("   FAIL: Accounts never lock out.")
+            print("   Security Risk: Attackers can guess password unlimited number of times.")
+        else:
+            print(f"  WARNING: Lockout threshold ({lockout_enabled}) is high.")
+            print("   Recommendation: Should be between 5-10 attempts.")
         lockout_status = "FAIL"
     
-    # Overall result
-    # TODO: Keep the original output for the 'else' statement, then think about how the admin might have a status code. 
-    # TODO: What about complexity becuase '123456789' will pass your test 
-    if length_status == "PASS" and lockout_status == "PASS":
-        print("\nOVERALL: Your password policy is SECURE!")
+    # --- CHECK 3: Password Complexity ---
+    print(f"\n3. Password complexity requirements: ", end="")
+    if complexity_enabled is None:
+        print("Complexity setting is not set.")
+        print("Please enable complexity setting.")
+        complexity_status = "SKIP"
+        total_checks += 1  
+    elif complexity_enabled:
+        print("ENABLED")
+        print("   PASS: Passwords must include uppercase, lowercase, numbers, and symbols.")
+        print("   ISO Control: A.9.4.3")
+        complexity_status = "PASS"
+        passed_checks += 1  # Add 1 to pass counter
     else:
-        print("\nOVERALL: Your password policy needs improvement")
+        print("DISABLED")
+        print("   FAIL: Passwords can be simple like '123456789'.")
+        print("   Security Risk: Users can set weak passwords that are easily guessed.")
+        complexity_status = "FAIL"
+    
+    # --- CALCULATE COMPLIANCE PERCENTAGE ---
+    # Percent calc: (passed / total) × 100
+    if total_checks > 0:
+        compliance_percentage = (passed_checks / total_checks) * 100
+    else:
+        compliance_percentage = 0
+    
+    # --- OVERALL RESULT ---
+    print("\n" + "=" * 60)
+    print("** COMPLIANCE SUMMARY **")
+    print("=" * 60)
+    
+    print(f"\n Compliance Score: {compliance_percentage:.1f}%")
+    print(f"   ({passed_checks} out of {total_checks} checks passed)")
+    
+    # Overall pass/fail
+    if length_status == "PASS" and lockout_status == "PASS" and complexity_status == "PASS":
+        print("\n OVERALL STATUS: SECURE")
+        print("   Your password policy meets security standards!")
+        print("   Status: COMPLIANT")
+    else:
+        print("\n OVERALL STATUS: NEEDS IMPROVEMENT")
+        print("   Your password policy has security gaps.")
+        print("   Status: NON-COMPLIANT")
+        
+        # Display outcome
+        print("\n   Issues found:")
+        if length_status == "FAIL":
+            print("   - Password length too short.")
+        if lockout_status == "FAIL":
+            print("   - Account lockout not properly configured.")
+        if complexity_status == "FAIL":
+            print("   - Password complexity requirements disabled.")
+         if complexity_status == "NONE":
+            print("   - Password complexity not set/undefined.")
+    
+    print("=" * 60)
 
 def main():
-    print("*** Password Policy Scanner ***")
-    print("This tool checks if your Windows password settings are secure.\n")
+    print("=" * 60)
+    print("*** PASSWORD POLICY COMPLIANCE SCANNER ***")
+    print("=" * 60)
+    print("This tool checks if your Windows password settings are secure")
+    print("against NIST Cybersecurity Framework and ISO 27001 standards.\n")
     
-    # 1: Get the password information from Windows
+    # Step 1: Get the password information from Windows
     password_data = get_password_info()
     
-    # 2: Find the specific values for password length and user lockout
+    # Step 2: Find the specific values needed
     min_length = find_password_length(password_data)
     lockout_setting = find_lockout_setting(password_data)
+    complexity_setting = check_password_complexity()
     
-    # 3: Check if these values are secure per NIST
-    check_password_security(min_length, lockout_setting)
+    # Step 3: Check if these values meet security standards
+    check_password_security(min_length, lockout_setting, complexity_setting)
     
-    # 4: Show the current sys settings
-    print("\n** Current Security Settings **")
+    """
+    # Step 4: Show raw data for reference
+    print("\n** RAW SYSTEM DATA **")
+    print("(This is the output from 'net accounts' command)")
+    print("-" * 60)
     print(password_data)
+    print("-" * 60)
+    """
     
-    print("\n** Learning Notes **")
-    print("- Minimum password length should be 8+ characters")
-    print("- Account lockout should be enabled (5-10 failed attempts)")
-    print("- Maps to NIST control PR.AA-01")
+    # Step 5: Educational information
+    print("\n** COMPLIANCE STANDARDS REFERENCE **")
+    print("-" * 60)
+    print(" Minimum password length: 8+ characters (NIST PR.AA-01)")
+    print(" Account lockout: 5-10 failed attempts (NIST PR.AA-03)")
+    print(" Password complexity: ENABLED (ISO 27001 A.9.4.3)")
+    print("\nThese checks help prevent:")
+    print("- Brute force password attacks")
+    print("- Weak password usage")
+    print("- Unauthorized access attempts")
+    print("-" * 60)
 
 if __name__ == "__main__":
     main()
