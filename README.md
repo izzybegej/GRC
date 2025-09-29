@@ -5,7 +5,7 @@
 
 ## Project Overview
 
-An automated Python tool that scans computer systems to check if they follow security rules from NIST and ISO 27001 frameworks. This tool will replace manual security audits that take weeks with automated scans that take hours.
+An automated Python tool that scans computer systems to check if they follow security rules from NIST and ISO 27001 frameworks.
 
 ## The Problem to Solve
 
@@ -16,24 +16,9 @@ An automated Python tool that scans computer systems to check if they follow sec
 
 ## What This Tool Will Do
 
-### [X] TODO: Reword 1, as this is more of a password policy 
-### [] TODO: Figure out how to get the standards in here. Look at Cynomi (vCISO as a service)
-### [] TODO: Look into HIPAA, PCI-DDS, FERPA
 1. **Scan Systems Automatically** - Check Windows and (later) Linux computers for security settings
 2. **Check Against Standards** - Compare findings to NIST and ISO 27001 requirements
-3. **Create Professional Reports** - Generate PDF reports for managers and IT teams
-4. **Track Security Over Time** - Store results to show if security is getting better or worse
-5. **Secure by Design** - Built with security best practices from day one
 
-## Target Security Controls
-### NOTE: You might want to punt this
-
-### Windows Systems
-- Password policy enforcement
-- User account management
-- Windows Firewall status
-- System service configurations
-- Registry security settings
 
 ## Technology Stack
 
@@ -52,7 +37,7 @@ Framework Research
 - [X] Create project scope document
 
 ## Installation
-- [ ] Work on scanner: Win 11 password policy compliance
+- [X] Work on scanner: Win 11 password policy compliance
 - [ ] Mapping for basic compliance
 - [ ] JSON storage implementations 
 
