@@ -55,6 +55,9 @@ This tool handles sensitive system configuration data. All development follows s
 - ISO 27001 Annex A Controls
 - Python subprocess documentation
 
+## OWASP Guide
+https://devguide.owasp.org/en/04-design/02-web-app-checklist/02-frameworks-libraries/
+
 ## License
 
 No licensing available at the moment. 
