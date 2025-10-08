@@ -37,9 +37,10 @@ Framework Research
 - [X] Create project scope document
 
 ## Installation
-- [X] Work on scanner: Win 11 password policy compliance
-- [ ] Mapping for basic compliance
-- [ ] JSON storage implementations 
+- [X] Scanner: Win 11 password policy compliance
+- [X] Mapping for basic compliance
+- [X] JSON storage implementations
+- [X] Streamlit app
 
 ## Security Considerations
 
