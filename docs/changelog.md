@@ -1,5 +1,11 @@
 ## Changelog
 Reverse chronological order.
+### Sprint 4 (Sept 30- Oct 12, 2024)
+#### Updated
+- Created streamlit app for password-policy.py (runs locally)
+- Added compensatory note section for non-compliant results.
+- .json file creation for compensating control history  
+
 ### Sprint 3 (Sept 15-29, 2024)
 #### Updated
 - Check for compliance
