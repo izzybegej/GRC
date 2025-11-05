@@ -74,14 +74,32 @@ def save_comment(control_name, comment_text):
 st.title("Password Policy Compliance Scanner")
 st.write("Checking Windows password settings against NIST CSF and ISO 27001 standards")
 
+# Initialize session state
+if 'scan_complete' not in st.session_state:
+    st.session_state.scan_complete = False
+
 # Button to run the scan
 if st.button("Run Compliance Scan", type="primary"):
+    st.session_state.scan_complete = True
+    if 'password_data' in st.session_state:
+        del st.session_state.password_data
+    st.rerun()
+
+if st.session_state.scan_complete:
     
     # Get the data from Windows
+    if 'password_data' not in st.session_state:
+        st.session_state.password_data = get_password_info()
+        st.session_state.min_length = find_password_length(st.session_state.password_data)
+        st.session_state.lockout = find_lockout_setting(st.session_state.password_data)
+        st.session_state.complexity = check_password_complexity()
+    
+    # Use stored values
+    password_data = st.session_state.password_data
     password_data = get_password_info()
-    min_length = find_password_length(password_data)
-    lockout = find_lockout_setting(password_data)
-    complexity = check_password_complexity()
+    min_length = st.session_state.min_length
+    lockout = st.session_state.lockout
+    complexity = st.session_state.complexity
     
     # Count passes and fails for compliance percentage
     total_checks = 3
@@ -91,7 +109,12 @@ if st.button("Run Compliance Scan", type="primary"):
     length_pass = False
     lockout_pass = False
     complexity_pass = False
-    
+   
+    if 'password_data' not in st.session_state:
+        st.session_state.password_data = get_password_info()
+        st.session_state.min_length = find_password_length(...)
+
+
     # Determine pass/fail for each
     if min_length >= 8:
         passed_checks += 1
@@ -155,6 +178,7 @@ if st.button("Run Compliance Scan", type="primary"):
                 if comment1.strip():
                     save_comment("NIST PR.AA-01 - Password Length", comment1)
                     st.success("Comment saved successfully")
+                    st.rerun()
                 else:
                     st.warning("Please enter a comment before saving")
     
@@ -194,6 +218,7 @@ if st.button("Run Compliance Scan", type="primary"):
                 if comment2.strip():
                     save_comment("NIST PR.AA-03 - Account Lockout", comment2)
                     st.success("Comment saved successfully")
+                    st.rerun()
                 else:
                     st.warning("Please enter a comment before saving")
     
@@ -233,10 +258,20 @@ if st.button("Run Compliance Scan", type="primary"):
                 if comment3.strip():
                     save_comment("ISO 27001 A.9.4.3 - Password Complexity", comment3)
                     st.success("Comment saved successfully")
+                    st.rerun()
                 else:
                     st.warning("Please enter a comment before saving")
     
     st.divider()
+
+    if st.button("Run New Scan"):
+        st.session_state.scan_complete = False
+        if 'password_data' in st.session_state:
+            del st.session_state.password_data
+            del st.session_state.min_length
+            del st.session_state.lockout
+            del st.session_state.complexity
+        st.rerun()
 
 else:
     st.info("Click 'Run Compliance Scan' to check password policies against security standards")
