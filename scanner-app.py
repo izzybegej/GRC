@@ -49,6 +49,41 @@ def check_password_complexity():
     except:
         return None
 
+def check_firewall_status():
+    try:
+        result = subprocess.run(
+            ['powershell', '-Command', 
+             'Get-NetFirewallProfile | Select-Object Name, Enabled'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        # Check if all profiles show "True" for enabled
+        if result.stdout.count('True') >= 3:
+            return True
+        else:
+            return False
+    except:
+        return None
+    
+def check_system_folder_permissions():
+    try:
+        # Check if regular users can modify System32
+        result = subprocess.run(
+            ['powershell', '-Command',
+             '$acl = Get-Acl "C:\\Windows\\System32"; ' +
+             '$userAccess = $acl.Access | Where-Object {$_.IdentityReference -match "Users" -and $_.FileSystemRights -match "Modify|FullControl"}; ' +
+             'if ($userAccess) { Write-Output "FAIL" } else { Write-Output "PASS" }'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if 'PASS' in result.stdout:
+            return True
+        else:
+            return False
+    except:
+        return None
+
+
 
 # --- PART 2: Save and load comments ---
 
@@ -93,6 +128,8 @@ if st.session_state.scan_complete:
         st.session_state.min_length = find_password_length(st.session_state.password_data)
         st.session_state.lockout = find_lockout_setting(st.session_state.password_data)
         st.session_state.complexity = check_password_complexity()
+        st.session_state.firewall = check_firewall_status()
+        st.session_state.file_permissions = check_system_folder_permissions()
     
     # Use stored values
     password_data = st.session_state.password_data
@@ -100,15 +137,19 @@ if st.session_state.scan_complete:
     min_length = st.session_state.min_length
     lockout = st.session_state.lockout
     complexity = st.session_state.complexity
-    
+    firewall = st.session_state.firewall
+    file_permissions = st.session_state.file_permissions
+
     # Count passes and fails for compliance percentage
-    total_checks = 3
+    total_checks = 5
     passed_checks = 0
     
     # Track which checks passed
     length_pass = False
     lockout_pass = False
     complexity_pass = False
+    firewall_pass = False
+    file_permissions_pass = False
    
     if 'password_data' not in st.session_state:
         st.session_state.password_data = get_password_info()
@@ -119,17 +160,34 @@ if st.session_state.scan_complete:
     if min_length >= 8:
         passed_checks += 1
         length_pass = True
+    else:
+        length_pass = False
     
     if lockout > 0 and lockout <= 10:
         passed_checks += 1
         lockout_pass = True
+    else:
+        lockout_pass = False
     
     if complexity == True:
         passed_checks += 1
         complexity_pass = True
-    elif complexity == None:
-        total_checks = 2  # Don't count unknown in percentage
+    else:
+        complexity_pass = False
     
+    if firewall == True:
+        passed_checks += 1
+        firewall_pass = True
+    else: 
+        firewall_pass = False
+
+    if file_permissions == True:
+        passed_checks += 1
+        file_permissions_pass = True
+    else:
+        file_permissions_pass = False
+
+
     # Calculate compliance percentage
     if total_checks > 0:
         compliance_percent = (passed_checks / total_checks) * 100
@@ -264,6 +322,86 @@ if st.session_state.scan_complete:
     
     st.divider()
 
+    # --- CHECK 4: Windows Firewall ---
+    st.write("### Check 4: Windows Firewall Status")
+    st.write("**Standards:** NIST CSF PR.IR-01 (Network Protection) / ISO 27001 A.9.1.2 (Network Access Control)")
+    
+    if firewall == True:
+        st.write("**Current Setting:** Enabled on all profiles")
+    elif firewall == False:
+        st.write("**Current Setting:** Disabled on one or more profiles")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Enabled on all network profiles (Domain, Private, Public)")
+    
+    if firewall_pass:
+        st.success("STATUS: PASS - Windows Firewall is enabled on all profiles")
+    elif firewall == None:
+        st.warning("STATUS: UNKNOWN - Could not determine firewall status")
+        st.write("**Note:** Manual verification required")
+    else:
+        st.error("STATUS: FAIL - Windows Firewall is not enabled on all profiles")
+        st.write("**Security Risk:** Systems without firewall protection are vulnerable to network-based attacks")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment4 = st.text_area(
+                "Compensating Control Documentation:",
+                key="firewall_comment",
+                height=100,
+                placeholder="Example: Windows Firewall disabled due to third-party firewall solution. Compensating controls: Alternate firewall deployed at network perimeter."
+            )
+            if st.button("Save Comment", key="firewall_save"):
+                if comment4.strip():
+                    save_comment("NIST PR.IR-01 / ISO A.9.1.2 - Windows Firewall", comment4)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
+# --- CHECK 5: System Folder Permissions ---
+    st.write("### Check 5: Critical System Folder Permissions")
+    st.write("**Standard:** ISO 27001 A.9.4.1 (Information Access Restriction)")
+    
+    if file_permissions == True:
+        st.write("**Current Setting:** Properly secured - Users cannot modify System32")
+    elif file_permissions == False:
+        st.write("**Current Setting:** Improperly configured - Users have modify access for System32")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Regular users should NOT have modify/write access to C:\\Windows\\System32")
+    
+    if file_permissions_pass:
+        st.success("STATUS: PASS - System folders are properly secured")
+    elif file_permissions == None:
+        st.warning("STATUS: UNKNOWN - Could not determine file permissions")
+        st.write("**Note:** Manual verification required or run as Administrator")
+    else:
+        st.error("STATUS: FAIL - Regular users have excessive permissions on system folders")
+        st.write("**Security Risk:** Users with modify access to system folders can replace critical files, install malware, or compromise system integrity")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment5 = st.text_area(
+                "Compensating Control Documentation:",
+                key="permissions_comment",
+                height=100,
+                placeholder="Example: Development workstation requires elevated user permissions. Compensating controls: Intrusion detection system monitoring file changes, full disk encryption enabled."
+            )
+            if st.button("Save Comment", key="permissions_save"):
+                if comment5.strip():
+                    save_comment("ISO 27001 A.9.4.1 - System Folder Permissions", comment5)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
     if st.button("Run New Scan"):
         st.session_state.scan_complete = False
         if 'password_data' in st.session_state:
@@ -271,6 +409,8 @@ if st.session_state.scan_complete:
             del st.session_state.min_length
             del st.session_state.lockout
             del st.session_state.complexity
+            del st.session_state.firewall
+            del st.session_state.file_permissions
         st.rerun()
 
 else:
