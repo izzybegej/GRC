@@ -82,8 +82,90 @@ def check_system_folder_permissions():
             return False
     except:
         return None
+    
+def check_automatic_updates():
+    try:
+        result = subprocess.run(
+            ['powershell', '-Command',
+             '$updates = (New-Object -ComObject Microsoft.Update.AutoUpdate).Settings; ' +
+             'if ($updates.NotificationLevel -eq 4) { Write-Output "ENABLED" } else { Write-Output "DISABLED" }'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if 'ENABLED' in result.stdout:
+            return True
+        else:
+            return False
+    except:
+        return None
+    
+def check_uac_status():
+    try:
+        result = subprocess.run(
+            ['powershell', '-Command',
+             'Get-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System" -Name EnableLUA | Select-Object -ExpandProperty EnableLUA'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if '1' in result.stdout.strip():
+            return True
+        else:
+            return False
+    except:
+        return None
 
+def check_screen_lock_timeout():
+    try:
+        result = subprocess.run(
+            ['powershell', '-Command',
+             'Get-ItemProperty -Path "HKCU:\\Control Panel\\Desktop" -Name ScreenSaveTimeOut | Select-Object -ExpandProperty ScreenSaveTimeOut'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        timeout = int(result.stdout.strip())
+        # Timeout is in seconds, 15 minutes = 900 seconds
+        if timeout > 0 and timeout <= 900:
+            return True
+        else:
+            return False
+    except:
+        return None
+    
+def check_guest_account():
+    try:
+        result = subprocess.run(
+            ['net', 'user', 'Guest'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        # Check if account is active or inactive
+        if 'Account active' in result.stdout:
+            for line in result.stdout.split('\n'):
+                if 'Account active' in line:
+                    if 'No' in line:
+                        return True  # Guest disabled = pass
+                    else:
+                        return False  # Guest enabled = fail
+        return None
+    except:
+        return None
 
+def check_critical_services():
+    try:
+        # Check if Windows Defender service is running
+        result = subprocess.run(
+            ['powershell', '-Command',
+             'Get-Service -Name WinDefend | Select-Object -ExpandProperty Status'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if 'Running' in result.stdout:
+            return True
+        else:
+            return False
+    except:
+        return None
+    
 
 # --- PART 2: Save and load comments ---
 
@@ -130,6 +212,12 @@ if st.session_state.scan_complete:
         st.session_state.complexity = check_password_complexity()
         st.session_state.firewall = check_firewall_status()
         st.session_state.file_permissions = check_system_folder_permissions()
+        st.session_state.auto_updates = check_automatic_updates()
+        st.session_state.uac = check_uac_status()
+        st.session_state.screen_lock = check_screen_lock_timeout()
+        st.session_state.guest_account = check_guest_account()
+        st.session_state.services = check_critical_services()
+
     
     # Use stored values
     password_data = st.session_state.password_data
@@ -139,9 +227,15 @@ if st.session_state.scan_complete:
     complexity = st.session_state.complexity
     firewall = st.session_state.firewall
     file_permissions = st.session_state.file_permissions
+    auto_updates = st.session_state.auto_updates
+    uac = st.session_state.uac
+    screen_lock = st.session_state.screen_lock
+    guest_account = st.session_state.guest_account
+    services = st.session_state.services
+
 
     # Count passes and fails for compliance percentage
-    total_checks = 5
+    total_checks = 10
     passed_checks = 0
     
     # Track which checks passed
@@ -150,10 +244,17 @@ if st.session_state.scan_complete:
     complexity_pass = False
     firewall_pass = False
     file_permissions_pass = False
+    auto_updates_pass = False
+    uac_pass = False
+    screen_lock_pass = False
+    user_accounts_pass = False
+    services_pass = False
+    guest_account_pass = False
    
     if 'password_data' not in st.session_state:
         st.session_state.password_data = get_password_info()
         st.session_state.min_length = find_password_length(...)
+
 
 
     # Determine pass/fail for each
@@ -187,6 +288,35 @@ if st.session_state.scan_complete:
     else:
         file_permissions_pass = False
 
+    if auto_updates == True:
+        passed_checks += 1
+        auto_updates_pass = True
+    else:
+        auto_updates_pass = False
+
+    if uac == True:
+        passed_checks += 1
+        uac_pass = True
+    else:
+        uac_pass = False
+  
+    if screen_lock == True:
+        passed_checks += 1
+        screen_lock_pass = True
+    else:
+        screen_lock_pass = False
+    
+    if guest_account == True:
+        passed_checks += 1
+        guest_account_pass = True
+    else:
+        guest_account_pass = False
+
+    if services == True:
+        passed_checks += 1
+        services_pass = True
+    else:
+        services_pass = False
 
     # Calculate compliance percentage
     if total_checks > 0:
@@ -402,6 +532,206 @@ if st.session_state.scan_complete:
     
     st.divider()
 
+# --- CHECK 6: Automatic Updates ---
+    st.write("### Check 6: Automatic Updates")
+    st.write("**Standard:** NIST CSF PR.PS-02 (Software Maintained and Updated)")
+    
+    if auto_updates == True:
+        st.write("**Current Setting:** Enabled - Download and install automatically")
+    elif auto_updates == False:
+        st.write("**Current Setting:** Disabled or manual updates only")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Automatic updates enabled")
+    
+    if auto_updates_pass:
+        st.success("STATUS: PASS - Automatic updates are enabled")
+    elif auto_updates == None:
+        st.warning("STATUS: UNKNOWN - Could not determine update settings")
+        st.write("**Note:** Manual verification required or run as Administrator")
+    else:
+        st.error("STATUS: FAIL - Automatic updates are not enabled")
+        st.write("**Security Risk:** Systems without automatic updates miss critical security patches, leaving vulnerabilities unaddressed")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment6 = st.text_area(
+                "Compensating Control Documentation:",
+                key="updates_comment",
+                height=100,
+                placeholder="Example: Production server uses managed update service with testing cycle. Compensating controls: Weekly security patch review process, emergency patching procedure for critical vulnerabilities, WSUS server manages deployment schedule."
+            )
+            if st.button("Save Comment", key="updates_save"):
+                if comment6.strip():
+                    save_comment("NIST PR.PS-02 - Automatic Updates", comment6)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
+# --- CHECK 7: User Account Control ---
+    st.write("### Check 7: User Account Control (UAC)")
+    st.write("**Standard:** NIST CSF PR.AA-05 (Access Permissions with Least Privilege)")
+    
+    if uac == True:
+        st.write("**Current Setting:** Enabled")
+    elif uac == False:
+        st.write("**Current Setting:** Disabled")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** UAC enabled to prompt for administrative actions")
+    
+    if uac_pass:
+        st.success("STATUS: PASS - User Account Control is enabled")
+    elif uac == None:
+        st.warning("STATUS: UNKNOWN - Could not determine UAC status")
+        st.write("**Note:** Manual verification required")
+    else:
+        st.error("STATUS: FAIL - User Account Control is disabled")
+        st.write("**Security Risk:** Without UAC, malware can gain administrative privileges without user notification")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment7 = st.text_area(
+                "Compensating Control Documentation:",
+                key="uac_comment",
+                height=100,
+                placeholder="Example: Development environment requires UAC disabled for testing. Compensating controls: System isolated on development VLAN, endpoint protection with behavioral monitoring, standard user accounts for daily tasks, administrative access logged."
+            )
+            if st.button("Save Comment", key="uac_save"):
+                if comment7.strip():
+                    save_comment("NIST PR.AA-05 - User Account Control", comment7)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
+# --- CHECK 8: Screen Lock Timeout ---
+    st.write("### Check 8: Screen Lock Timeout")
+    st.write("**Standard:** NIST CSF PR.AA-03 (Authentication and Access Control)")
+    
+    if screen_lock == True:
+        st.write("**Current Setting:** Screen lock enabled (15 minutes or less)")
+    elif screen_lock == False:
+        st.write("**Current Setting:** Screen lock disabled or timeout too long")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Screen lock after 15 minutes or less of inactivity")
+    
+    if screen_lock_pass:
+        st.success("STATUS: PASS - Screen lock timeout is properly configured")
+    elif screen_lock == None:
+        st.warning("STATUS: UNKNOWN - Could not determine screen lock settings")
+        st.write("**Note:** Manual verification required")
+    else:
+        st.error("STATUS: FAIL - Screen lock timeout is not properly configured")
+        st.write("**Security Risk:** Unattended workstations without automatic locking allow unauthorized physical access")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment8 = st.text_area(
+                "Compensating Control Documentation:",
+                key="screenlock_comment",
+                height=100,
+                placeholder="Example: Public kiosk requires no auto-lock for accessibility. Compensating controls: System has no access to sensitive data, all sessions timeout after 5 minutes of inactivity, physical security camera monitoring, guest account with restricted permissions."
+            )
+            if st.button("Save Comment", key="screenlock_save"):
+                if comment8.strip():
+                    save_comment("NIST PR.AA-03 - Screen Lock Timeout", comment8)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+ 
+    st.divider()
+
+# --- CHECK 9: Guest Account Status ---
+    st.write("### Check 9: Guest Account Disabled")
+    st.write("**Standard:** NIST CSF PR.AA-05 (Access Permissions with Least Privilege)")
+    
+    if guest_account == True:
+        st.write("**Current Setting:** Guest account is disabled")
+    elif guest_account == False:
+        st.write("**Current Setting:** Guest account is enabled")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Guest account must be disabled")
+    
+    if guest_account_pass:
+        st.success("STATUS: PASS - Guest account is properly disabled")
+    elif guest_account == None:
+        st.warning("STATUS: UNKNOWN - Could not determine guest account status")
+        st.write("**Note:** Manual verification required")
+    else:
+        st.error("STATUS: FAIL - Guest account is enabled")
+        st.write("**Security Risk:** Enabled guest accounts allow unauthorized users to access the system without credentials")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment9 = st.text_area(
+                "Compensating Control Documentation:",
+                key="guest_comment",
+                height=100,
+                placeholder="Example: Public library computer requires guest access. Compensating controls: Guest account heavily restricted with minimal permissions, session timeout after 30 minutes, all activity logged and monitored, no access to network resources."
+            )
+            if st.button("Save Comment", key="guest_save"):
+                if comment9.strip():
+                    save_comment("NIST PR.AA-05 - Guest Account Disabled", comment9)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
+# --- CHECK 10: Critical Services Status ---
+    st.write("### Check 10: Critical Security Services")
+    st.write("**Standard:** NIST CSF PR.PS-04 (Log Records Generated and Monitored)")
+    
+    if services == True:
+        st.write("**Current Setting:** Windows Defender service is running")
+    elif services == False:
+        st.write("**Current Setting:** Windows Defender service is not running")
+    else:
+        st.write("**Current Setting:** Unknown")
+    
+    st.write("**Requirement:** Critical security services must be running")
+    
+    if services_pass:
+        st.success("STATUS: PASS - Windows Defender service is active")
+    elif services == None:
+        st.warning("STATUS: UNKNOWN - Could not check service status")
+        st.write("**Note:** Manual verification required or run as Administrator")
+    else:
+        st.error("STATUS: FAIL - Windows Defender service is not running")
+        st.write("**Security Risk:** Critical security services not running leaves system unprotected from threats")
+        
+        with st.expander("Add Compensating Control Comment"):
+            st.write("Document why this system cannot meet the requirement and what alternative controls are in place:")
+            comment10 = st.text_area(
+                "Compensating Control Documentation:",
+                key="services_comment",
+                height=100,
+                placeholder="Example: Windows Defender disabled due to enterprise antivirus deployment. Compensating controls: CrowdStrike Falcon installed and monitored centrally, EDR active on all endpoints, security operations center monitoring alerts 24/7."
+            )
+            if st.button("Save Comment", key="services_save"):
+                if comment10.strip():
+                    save_comment("NIST PR.PS-04 - Critical Services", comment10)
+                    st.success("Comment saved successfully")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment before saving")
+    
+    st.divider()
+
     if st.button("Run New Scan"):
         st.session_state.scan_complete = False
         if 'password_data' in st.session_state:
@@ -411,6 +741,11 @@ if st.session_state.scan_complete:
             del st.session_state.complexity
             del st.session_state.firewall
             del st.session_state.file_permissions
+            del st.session_state.auto_updates
+            del st.session_state.uac
+            del st.session_state.screen_lock
+            del st.session_state.guest_account
+            del st.session_state.services
         st.rerun()
 
 else:

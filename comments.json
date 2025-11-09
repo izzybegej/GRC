@@ -8,5 +8,15 @@
     "control": "NIST PR.AA-01 - Password Length",
     "comment": "fhjfj",
     "date": "2025-11-05 12:37"
+  },
+  {
+    "control": "NIST PR.AA-01 - Password Length",
+    "comment": "test",
+    "date": "2025-11-06 13:12"
+  },
+  {
+    "control": "NIST PR.AA-01 - Password Length",
+    "comment": "MFA in place. ",
+    "date": "2025-11-06 13:23"
   }
 ]
