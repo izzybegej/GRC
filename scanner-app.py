@@ -8,6 +8,8 @@ import streamlit as st
 import json
 from datetime import datetime
 import subprocess
+import sqlite3
+import pandas as pd
 
 # --- PART 1: Run the password checks (from password-policy.py) ---
 
@@ -185,13 +187,129 @@ def save_comment(control_name, comment_text):
     with open('comments.json', 'w') as f:
         json.dump(all_comments, f, indent=2)
 
-# --- PART 3: Display in Streamlit ---
+# --- PART 3: Database function ---
+def setup_database():
+    """
+    Creates the database and tables if they don't exist.
+    This runs once when the app starts.
+    """
+    conn = sqlite3.connect('scanner.db')
+    cursor = conn.cursor()
+    
+    # Create scans table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scans (
+            scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_date TEXT,
+            system_name TEXT,
+            compliance_score REAL,
+            overall_status TEXT
+        )
+    ''')
+    
+    # Create check_results table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS check_results (
+            result_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER,
+            check_number INTEGER,
+            check_name TEXT,
+            control_id TEXT,
+            status TEXT,
+            current_value TEXT,
+            FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+# --- PART 5: Save scan to database ---
+def save_scan_to_database(scan_date, system_name, compliance_score, overall_status, check_results_list):
+    """
+    Saves a complete scan (summary + all check results) to database.
+    
+    check_results_list should be a list of dictionaries like:
+    [
+        {'check_number': 1, 'check_name': 'Password Length', 'control_id': 'PR.AA-01', 
+         'status': 'FAIL', 'current_value': '6 characters'},
+        ...
+    ]
+    """
+    conn = sqlite3.connect('scanner.db')
+    cursor = conn.cursor()
+    
+    # Insert scan summary
+    cursor.execute('''
+        INSERT INTO scans (scan_date, system_name, compliance_score, overall_status)
+        VALUES (?, ?, ?, ?)
+    ''', (scan_date, system_name, compliance_score, overall_status))
+    
+    # Get the scan_id that was just created
+    scan_id = cursor.lastrowid
+    
+    # Insert all check results linked to this scan
+    for check in check_results_list:
+        cursor.execute('''
+            INSERT INTO check_results (scan_id, check_number, check_name, control_id, status, current_value)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (scan_id, check['check_number'], check['check_name'], 
+              check['control_id'], check['status'], check['current_value']))
+    
+    conn.commit()
+    conn.close()
+    
+    return scan_id
+
+# --- PART 5: SCAN HISTORY
+def get_scan_history(limit=10):
+    """
+    Retrieves the most recent scans from database.
+    Returns a list of scan summaries.
+    """
+    conn = sqlite3.connect('scanner.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT scan_id, scan_date, system_name, compliance_score, overall_status
+        FROM scans
+        ORDER BY scan_date DESC
+        LIMIT ?
+    ''', (limit,))
+    
+    scans = cursor.fetchall()
+    conn.close()
+    
+    return scans
+
+
+def get_scan_details(scan_id):
+    """
+    Gets all check results for a specific scan.
+    """
+    conn = sqlite3.connect('scanner.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT check_number, check_name, control_id, status, current_value
+        FROM check_results
+        WHERE scan_id = ?
+        ORDER BY check_number
+    ''', (scan_id,))
+    
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+# --- PART 6: Display in Streamlit ---
 
 
 st.title("Password Policy Compliance Scanner")
 st.write("Checking Windows password settings against NIST CSF and ISO 27001 standards")
 
 # Initialize session state
+setup_database()
+
 if 'scan_complete' not in st.session_state:
     st.session_state.scan_complete = False
 
@@ -327,6 +445,34 @@ if st.session_state.scan_complete:
     # Display compliance summary at top
     st.subheader("Compliance Summary")
     
+    # Setup for database save
+    scan_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    system_name = "LocalSystem"  # You could make this dynamic later
+    overall_status = "COMPLIANT" if compliance_percent == 100 else "NON-COMPLIANT"
+    
+    # Collect all check results
+    check_results_list = [
+        {'check_number': 1, 'check_name': 'Password Length', 'control_id': 'NIST PR.AA-01',
+         'status': 'PASS' if length_pass else 'FAIL', 'current_value': f"{min_length} characters"},
+        {'check_number': 2, 'check_name': 'Account Lockout', 'control_id': 'NIST PR.AA-03',
+         'status': 'PASS' if lockout_pass else 'FAIL', 'current_value': f"{lockout} attempts" if lockout > 0 else "Never"},
+        {'check_number': 3, 'check_name': 'Password Complexity', 'control_id': 'ISO A.9.4.3',
+         'status': 'PASS' if complexity_pass else 'FAIL', 'current_value': 'Enabled' if complexity else 'Disabled'},
+        {'check_number': 4, 'check_name': 'Windows Firewall', 'control_id': 'NIST PR.IR-01',
+         'status': 'PASS' if firewall_pass else 'FAIL', 'current_value': 'Enabled' if firewall else 'Disabled'},
+        {'check_number': 5, 'check_name': 'System Folder Permissions', 'control_id': 'ISO A.9.4.1',
+         'status': 'PASS' if file_permissions_pass else 'FAIL', 'current_value': 'Secured' if file_permissions else 'Insecure'},
+        {'check_number': 6, 'check_name': 'Automatic Updates', 'control_id': 'NIST PR.PS-02',
+         'status': 'PASS' if auto_updates_pass else 'FAIL', 'current_value': 'Enabled' if auto_updates else 'Disabled'},
+        {'check_number': 7, 'check_name': 'User Account Control', 'control_id': 'NIST PR.AA-05',
+         'status': 'PASS' if uac_pass else 'FAIL', 'current_value': 'Enabled' if uac else 'Disabled'},
+        {'check_number': 8, 'check_name': 'Screen Lock Timeout', 'control_id': 'NIST PR.AA-03',
+         'status': 'PASS' if screen_lock_pass else 'FAIL', 'current_value': '15 min or less' if screen_lock else 'Too long/disabled'},
+        {'check_number': 9, 'check_name': 'Guest Account', 'control_id': 'NIST PR.AA-05',
+         'status': 'PASS' if guest_account_pass else 'FAIL', 'current_value': 'Disabled' if guest_account else 'Enabled'},
+        {'check_number': 10, 'check_name': 'Critical Services', 'control_id': 'NIST PR.PS-04',
+         'status': 'PASS' if services_pass else 'FAIL', 'current_value': 'Running' if services else 'Not running'}
+    ]
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Compliance Score", f"{compliance_percent:.1f}%")
@@ -340,6 +486,17 @@ if st.session_state.scan_complete:
     
     st.divider()
     st.subheader("Detailed Results")
+
+    # Button to save scan to database
+    if st.button("Save Scan to Database", type="secondary"):
+        scan_id = save_scan_to_database(
+            scan_date, 
+            system_name, 
+            compliance_percent, 
+            overall_status, 
+            check_results_list
+        )
+        st.success(f"Scan saved to database! Scan ID: {scan_id}")
     
     # --- CHECK 1: Password Length --- 
 
@@ -751,22 +908,57 @@ if st.session_state.scan_complete:
 else:
     st.info("Click 'Run Compliance Scan' to check password policies against security standards")
 
-# --- SAVED COMMENTS SECTION ---
+# --- SCAN HISTORY SECTION ---
+
+# --- SCAN HISTORY COMPARISON TABLE ---
 
 st.divider()
-st.subheader("Saved Compensating Control Comments")
+st.subheader("Scan History - Compliance Comparison")
 
-try:
-    with open('comments.json', 'r') as f:
-        saved_comments = json.load(f)
+scans = get_scan_history(limit=5)  # Show last 5 scans
+
+if scans:
+    # Build data for table
+    table_data = []
+    check_names = [
+        "Password Length",
+        "Account Lockout", 
+        "Password Complexity",
+        "Windows Firewall",
+        "System Folder Permissions",
+        "Automatic Updates",
+        "User Account Control",
+        "Screen Lock Timeout",
+        "Guest Account",
+        "Critical Services"
+    ]
     
-    if saved_comments:
-        for comment in saved_comments:
-            st.write(f"**Control:** {comment['control']}")
-            st.write(f"**Date Documented:** {comment['date']}")
-            st.write(f"**Compensating Control:** {comment['comment']}")
-            st.divider()
-    else:
-        st.info("No compensating control comments documented yet")
-except:
-    st.info("No compensating control comments documented yet")
+    for check_num, check_name in enumerate(check_names, 1):
+        row = {"Check": f"{check_num}. {check_name}"}
+        
+        for scan in scans:
+            scan_id, scan_date, system_name, compliance_score, overall_status = scan
+            details = get_scan_details(scan_id)
+            
+            # Find this check's result
+            for detail in details:
+                detail_check_num, detail_check_name, control_id, status, current_value = detail
+                if detail_check_num == check_num:
+                    row[f"Scan {scan_id}\n{scan_date}"] = f"{status}\n({current_value})"
+                    break
+        
+        table_data.append(row)
+    
+    # Add compliance scores row
+    compliance_row = {"Check": "Overall Compliance"}
+    for scan in scans:
+        scan_id, scan_date, system_name, compliance_score, overall_status = scan
+        compliance_row[f"Scan {scan_id}\n{scan_date}"] = f"{compliance_score:.1f}%"
+    table_data.append(compliance_row)
+    
+    # Display as table
+    df = pd.DataFrame(table_data)
+    st.dataframe(df, width='stretch', hide_index=True)
+    
+else:
+    st.info("No scan history yet. Run a scan and click 'Save to Database' to start tracking.")
