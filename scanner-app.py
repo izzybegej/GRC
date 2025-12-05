@@ -187,6 +187,30 @@ def save_comment(control_name, comment_text):
     with open('comments.json', 'w') as f:
         json.dump(all_comments, f, indent=2)
 
+def get_latest_comments():
+    """
+    Gets the most recent comment for each check from JSON file.
+    Returns a dictionary: {check_name: {'comment': text, 'date': date}}
+    """
+    try:
+        with open('comments.json', 'r') as f:
+            all_comments = json.load(f)
+    except:
+        return {}
+    
+    # Keep only the latest comment for each control
+    latest = {}
+    for comment in all_comments:
+        control = comment['control']
+        if control not in latest or comment['date'] > latest[control]['date']:
+            latest[control] = {
+                'comment': comment['comment'],
+                'date': comment['date']
+            }
+    
+    return latest
+
+
 # --- PART 3: Database function ---
 def setup_database():
     """
@@ -447,7 +471,7 @@ if st.session_state.scan_complete:
     
     # Setup for database save
     scan_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    system_name = "LocalSystem"  # You could make this dynamic later
+    system_name = "LocalSystem"  
     overall_status = "COMPLIANT" if compliance_percent == 100 else "NON-COMPLIANT"
     
     # Collect all check results
@@ -498,6 +522,27 @@ if st.session_state.scan_complete:
         )
         st.success(f"Scan saved to database! Scan ID: {scan_id}")
     
+# Download report button
+    report_text = f"GRC SCANNER COMPLIANCE REPORT\n{'='*50}\n\n"
+    report_text += f"Scan Date: {scan_date}\n"
+    report_text += f"System: {system_name}\n"
+    report_text += f"Compliance Score: {compliance_percent:.1f}%\n"
+    report_text += f"Overall Status: {overall_status}\n\n"
+    report_text += f"{'='*50}\nDETAILED RESULTS\n{'='*50}\n\n"
+    for check in check_results_list:
+        report_text += f"{check['check_number']}. {check['check_name']}\n"
+        report_text += f"   Control: {check['control_id']}\n"
+        report_text += f"   Status: {check['status']}\n"
+        report_text += f"   Current Value: {check['current_value']}\n\n"
+    
+    st.download_button(
+        label="Download Report",
+        data=report_text,
+        file_name=f"GRC_Scan_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+        mime="text/plain",
+        type="secondary"
+    )
+
     # --- CHECK 1: Password Length --- 
 
     st.write("### Check 1: Minimum Password Length")
@@ -959,6 +1004,53 @@ if scans:
     # Display as table
     df = pd.DataFrame(table_data)
     st.dataframe(df, width='stretch', hide_index=True)
-    
+
 else:
     st.info("No scan history yet. Run a scan and click 'Save to Database' to start tracking.")
+
+
+ # --- COMPENSATING CONTROLS SUMMARY ---
+
+st.divider()
+st.subheader("Latest Compensating Controls")
+
+# Get latest comments
+latest_comments = get_latest_comments()
+
+# Define check names and their control IDs
+checks_info = [
+    ("Password Length", "NIST PR.AA-01 - Password Length"),
+    ("Account Lockout", "NIST PR.AA-03 - Account Lockout"),
+    ("Password Complexity", "ISO 27001 A.9.4.3 - Password Complexity"),
+    ("Windows Firewall", "NIST PR.IR-01 / ISO A.9.1.2 - Windows Firewall"),
+    ("System Folder Permissions", "ISO 27001 A.9.4.1 - System Folder Permissions"),
+    ("Automatic Updates", "NIST PR.PS-02 - Automatic Updates"),
+    ("User Account Control", "NIST PR.AA-05 - User Account Control"),
+    ("Screen Lock Timeout", "NIST PR.AA-03 - Screen Lock Timeout"),
+    ("Guest Account", "NIST PR.AA-05 - Guest Account Disabled"),
+    ("Critical Services", "NIST PR.PS-04 - Critical Services")
+]
+
+# Build table data
+controls_data = []
+for check_name, control_id in checks_info:
+    if control_id in latest_comments:
+        # Has a comment
+        row = {
+            "Check": check_name,
+            "Latest Compensating Control": latest_comments[control_id]['comment'],
+            "Date Documented": latest_comments[control_id]['date']
+        }
+    else:
+        # No comment
+        row = {
+            "Check": check_name,
+            "Latest Compensating Control": "Compliant, no additional controls needed.",
+            "Date Documented": "-"
+        }
+    controls_data.append(row)
+
+# Display table
+controls_df = pd.DataFrame(controls_data)
+st.dataframe(controls_df, width='stretch', hide_index=True)
+    
